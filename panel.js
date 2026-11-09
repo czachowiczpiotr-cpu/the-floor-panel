@@ -53,8 +53,16 @@ async function persist(cat) {
   try { await DB.put('cats', cat); }
   catch (e) { console.error(e); toast('⚠️ Nie udało się zapisać – za mało miejsca w telefonie?', 4000); }
 }
-let saveTimer = null;
-const persistSoon = cat => { clearTimeout(saveTimer); saveTimer = setTimeout(() => persist(cat), 400); };
+// osobny licznik dla każdej kategorii – szybkie przełączanie nie gubi zmian
+const saveTimers = new Map();
+const persistSoon = cat => {
+  clearTimeout(saveTimers.get(cat));
+  saveTimers.set(cat, setTimeout(() => { saveTimers.delete(cat); persist(cat); }, 400));
+};
+async function flushAll() {
+  for (const [cat, t] of saveTimers) { clearTimeout(t); saveTimers.delete(cat); await persist(cat); }
+  if (typeof flushAnswer === 'function') await flushAnswer();
+}
 
 /* ---------------- zdjęcia ---------------- */
 async function decode(file) {
@@ -255,6 +263,7 @@ function labDelete() {
 //            nowe hasło    key "slug|+id"       → {slug, add: true, na, blob}
 let fixItem = null;   // {cat, key}
 const recsOf = slug => Object.values(repl).filter(r => r.slug === slug);
+const recSig = r => JSON.stringify([r.na || '', !!r.del, !!r.add]);
 const isEmptyEdit = r => !r.add && !r.blob && !r.del && !(norm(r.na) && norm(r.na) !== r.a);
 async function saveRec(r) {
   r.sent = false;
@@ -482,22 +491,38 @@ async function sendCloud() {
   if (problems().length) return renderSend();
   const btn = $('#sendGo');
   btn.disabled = true; btn.textContent = 'Łączę…';
+  const wasDirty = replDirty();
   try {
     const empty = cats.filter(c => !c.items.length && c.sent).map(c => c.id);
     const deleted = [...getDeleted(), ...empty];
+    await flushAll();
+    const snapCats = new Map(cats.map(c => [c, sig(c)]));
+    const snapRepl = new Map(Object.values(repl).map(r => [r, [recSig(r), r.blob]]));
+    replDirty(false);                       // usunięcia zrobione w trakcie wysyłki ustawią to znowu
     const res = await Cloud.sync({
       cats: cats.filter(c => c.items.length), repl: Object.values(repl), deletedCats: deleted, author: getName(),
-      onStep: (d, t) => { btn.textContent = `Wysyłam zdjęcia ${d} / ${t}…`; },
+      onStep: (d, t) => { btn.textContent = `Wysyłam ${d} / ${t}… nie zamykaj strony`; },
       persistCat: c => persist(c), persistRepl: r => DB.put('repl', r),
     });
-    for (const c of cats) { if (c.items.length) c.sent = sig(c); else delete c.sent; await persist(c); }
-    for (const r of Object.values(repl)) { r.sent = true; await DB.put('repl', r); }
-    setDeleted([]); replDirty(false);
+    // „w grze” tylko to, co było w paczce – zmiany zrobione w trakcie wysyłki czekają na następne „Wyślij”
+    let changedMeanwhile = false;
+    for (const c of cats) {
+      if (!snapCats.has(c)) { changedMeanwhile = true; continue; }
+      if (c.items.length) c.sent = snapCats.get(c); else delete c.sent;
+      if (c.sent && c.sent !== sig(c)) changedMeanwhile = true;
+      await persist(c);
+    }
+    for (const r of Object.values(repl)) {
+      const sn = snapRepl.get(r);
+      if (sn && sn[0] === recSig(r) && sn[1] === r.blob) { r.sent = true; await DB.put('repl', r); } else changedMeanwhile = true;
+    }
+    setDeleted(getDeleted().filter(id => !deleted.includes(id)));
     $('#sendDone').classList.remove('hidden');
     $('#sendDone').innerHTML = `✅ Wysłane${res.uploaded ? ` (${res.uploaded} zdjęć)` : ''}! Twoje zmiany są już w grze.<br><span class="hint">Możesz dalej coś dodawać – potem znowu „Wyślij do gry”.</span>`;
-    toast('Wysłane do gry ✓');
+    toast(changedMeanwhile ? 'Wysłane ✓ – zmiany z ostatnich sekund wyślij jeszcze raz' : 'Wysłane do gry ✓', changedMeanwhile ? 4500 : 2400);
   } catch (e) {
     console.error(e);
+    if (wasDirty) replDirty(true);
     const offline = !navigator.onLine;
     toast(offline ? 'Brak internetu – spróbuj, jak złapiesz zasięg. Nic nie przepadło.' : 'Nie udało się wysłać. Spróbuj jeszcze raz – nic nie przepadło.', 5000);
   }
@@ -617,6 +642,7 @@ function bind() {
   $('#labPrev').onclick = () => labStep(-1);
   $('#labNext').onclick = () => labStep(1);
   $('#labDel').onclick = labDelete;
+  $('#labInput').oninput = () => { const it = curCat && curCat.items[labIdx]; if (it && !$('#labeler').classList.contains('hidden')) { it.a = $('#labInput').value; persistSoon(curCat); } };
   $('#labInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); labStep(1); } };
   $('#fixCat').onchange = () => { try { localStorage.setItem('tfp.fixCat', $('#fixCat').value); } catch (e) {} $('#fixSearch').value = ''; renderFix(); };
   $('#fixSearch').oninput = renderFix;
@@ -631,7 +657,10 @@ function bind() {
   $('#sendGo').onclick = () => Cloud.enabled() ? sendCloud() : send();
   $('#sendFile').onclick = send;
   $('#wipe').onclick = wipe;
-  window.addEventListener('beforeunload', () => { if (curCat) persist(curCat); });
+  window.addEventListener('beforeunload', () => { if (curCat) persist(curCat); flushAll(); });
+  window.addEventListener('pagehide', () => { flushAll(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushAll(); });
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 }
 
 (async function init() {
