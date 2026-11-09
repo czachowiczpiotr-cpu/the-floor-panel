@@ -53,7 +53,7 @@
     <div id="sendSummary"></div>
     <div id="sendProblems"></div>
     <button id="sendGo" class="btn big wide">📤 Wyślij</button>
-    <p class="hint center">Powstanie jeden plik. Wyślij go Messengerem albo WhatsAppem – resztę ogarnie gra.</p>
+    <button id="sendFile" class="btn ghost wide hidden">Nie działa? Zapisz jako plik i wyślij Piotrkowi</button>
     <div id="sendDone" class="card ok hidden"></div>
     <button id="wipe" class="btn ghost danger wide">Wyczyść wszystko i zacznij od nowa</button>
   </div>
@@ -138,7 +138,7 @@
       <div class="slide">
         <div class="big">📤</div>
         <h2>4. Wyślij</h2>
-        <p>Zakładka <b>Wyślij</b> sprawdzi, czy wszystko jest podpisane, i zrobi jeden plik. Wyślij go Piotrkowi na <b>Messengerze lub WhatsAppie</b> – i gotowe.</p>
+        <p>W zakładce <b>Wyślij</b> kliknij <b>📤 Wyślij do gry</b>. Panel sprawdzi, czy wszystko jest podpisane, i od razu wrzuci to do gry – nic nie musisz nikomu przesyłać.</p>
         <p class="hint">Twoja praca zapisuje się sama – możesz zamknąć stronę i wrócić później.</p>
       </div>
     </div>
@@ -152,6 +152,9 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="cloud.js"></script>
 <script src="catalog.js"></script>
 <script src="panel.js"></script>
 </body>

@@ -104,7 +104,16 @@ function showTab(name) {
 }
 
 /* ---------------- moje kategorie ---------------- */
+// podpis treści kategorii – porównujemy z ostatnio wysłanym
+const sig = c => JSON.stringify([norm(c.name), c.items.map(i => [i.id, norm(i.a)])]);
+const isSent = c => c.sent && c.sent === sig(c);
 function catStatus(c) {
+  const st = catStatusRaw(c);
+  if (!Cloud.enabled() || st[0] === 'bad' || c.items.some(i => !norm(i.a))) return st;
+  if (isSent(c)) return ['ok', `✓ w grze · ${c.items.length} zdjęć${c.items.length < MIN_GOOD ? ' (dodaj więcej)' : ''}`];
+  return ['warn', 'gotowe – kliknij Wyślij'];
+}
+function catStatusRaw(c) {
   const missing = c.items.filter(i => !norm(i.a)).length;
   if (!norm(c.name)) return ['bad', 'brak nazwy'];
   if (!c.items.length) return ['bad', 'brak zdjęć'];
@@ -213,6 +222,7 @@ function renderLabeler() {
   setTimeout(() => $('#labInput').focus({ preventScroll: true }), 30);
 }
 function commitLabel() {
+  if ($('#labeler').classList.contains('hidden')) return;   // okno zamknięte – nic do zapisania
   const it = curCat.items[labIdx];
   if (it) { it.a = norm($('#labInput').value); persistSoon(curCat); }
 }
@@ -295,6 +305,7 @@ async function fixPick(file) {
     const blob = await shrink(file);
     const { cat, it } = fixItem, key = cat.slug + '|' + it.a;
     repl[key] = { key, slug: cat.slug, a: it.a, blob };
+    replDirty(true);
     await DB.put('repl', repl[key]);
     toast('Podmienione ✓');
     openFixer(cat, it);
@@ -303,11 +314,21 @@ async function fixPick(file) {
 async function fixUndo() {
   const { cat, it } = fixItem, key = cat.slug + '|' + it.a;
   delete repl[key];
+  replDirty(true);
   await DB.del('repl', key).catch(() => {});
   openFixer(cat, it);
 }
 
 /* ---------------- wysyłka ---------------- */
+const getDeleted = () => { try { return JSON.parse(localStorage.getItem('tfp.deleted')) || []; } catch (e) { return []; } };
+const setDeleted = list => { try { localStorage.setItem('tfp.deleted', JSON.stringify([...new Set(list)])); } catch (e) {} };
+const replDirty = v => { try { if (v === undefined) return localStorage.getItem('tfp.replDirty') === '1'; localStorage.setItem('tfp.replDirty', v ? '1' : '0'); } catch (e) {} };
+function pendingChanges() {
+  const cs = cats.filter(c => c.items.length && !isSent(c)).length;
+  const del = getDeleted().length + cats.filter(c => !c.items.length && c.sent).length;
+  const rs = Object.values(repl).filter(r => !r.sent).length + (replDirty() ? 1 : 0);
+  return cs + del + rs;
+}
 function problems() {
   const out = [];
   for (const c of cats) {
@@ -327,7 +348,7 @@ function problems() {
 function sendable() { return { c: cats.filter(c => c.items.length), r: Object.values(repl) }; }
 function updateBadge() {
   const { c, r } = sendable();
-  $('#sendBadge').textContent = (c.length + r.length) || '';
+  $('#sendBadge').textContent = (Cloud.enabled() ? pendingChanges() : c.length + r.length) || '';
 }
 function renderSend() {
   const { c, r } = sendable();
@@ -338,9 +359,41 @@ function renderSend() {
   const pr = problems(), warn = c.filter(x => x.items.length < MIN_GOOD).map(x => `„${esc(norm(x.name) || 'Bez nazwy')}” ma tylko ${x.items.length} zdjęć – w grze mogą się powtarzać. Lepiej ${MIN_GOOD}+.`);
   $('#sendProblems').innerHTML = pr.map(p => `<div class="problem">⛔ ${esc(p)}</div>`).join('') + warn.map(w => `<div class="warnBox">⚠️ ${w}</div>`).join('');
   const btn = $('#sendGo');
-  btn.disabled = !!pr.length || !(c.length + r.length);
-  btn.textContent = `📤 Wyślij ${OWNER}`;
+  if (Cloud.enabled()) {
+    const n = pendingChanges();
+    btn.disabled = !!pr.length || !n;
+    btn.textContent = n ? '📤 Wyślij do gry' : '✓ Wszystko jest już w grze';
+    $('#sendFile').classList.remove('hidden');
+  } else {
+    btn.disabled = !!pr.length || !(c.length + r.length);
+    btn.textContent = `📤 Wyślij ${OWNER}`;
+  }
   updateBadge();
+}
+async function sendCloud() {
+  if (problems().length) return renderSend();
+  const btn = $('#sendGo');
+  btn.disabled = true; btn.textContent = 'Łączę…';
+  try {
+    const empty = cats.filter(c => !c.items.length && c.sent).map(c => c.id);
+    const deleted = [...getDeleted(), ...empty];
+    const res = await Cloud.sync({
+      cats: cats.filter(c => c.items.length), repl: Object.values(repl), deletedCats: deleted, author: getName(),
+      onStep: (d, t) => { btn.textContent = `Wysyłam zdjęcia ${d} / ${t}…`; },
+      persistCat: c => persist(c), persistRepl: r => DB.put('repl', r),
+    });
+    for (const c of cats) { if (c.items.length) c.sent = sig(c); else delete c.sent; await persist(c); }
+    for (const r of Object.values(repl)) { r.sent = true; await DB.put('repl', r); }
+    setDeleted([]); replDirty(false);
+    $('#sendDone').classList.remove('hidden');
+    $('#sendDone').innerHTML = `✅ Wysłane${res.uploaded ? ` (${res.uploaded} zdjęć)` : ''}! Twoje zmiany są już w grze.<br><span class="hint">Możesz dalej coś dodawać – potem znowu „Wyślij do gry”.</span>`;
+    toast('Wysłane do gry ✓');
+  } catch (e) {
+    console.error(e);
+    const offline = !navigator.onLine;
+    toast(offline ? 'Brak internetu – spróbuj, jak złapiesz zasięg. Nic nie przepadło.' : 'Nie udało się wysłać. Spróbuj jeszcze raz – nic nie przepadło.', 5000);
+  }
+  renderSend();
 }
 const toDataURL = blob => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
 async function buildPack() {
@@ -385,7 +438,9 @@ function download(file) {
   setTimeout(() => URL.revokeObjectURL(a.href), 20000);
 }
 async function wipe() {
-  if (!confirm('Na pewno usunąć wszystkie twoje kategorie i poprawki z tego telefonu?')) return;
+  if (!confirm('Na pewno usunąć wszystkie twoje kategorie i poprawki? Po kliknięciu „Wyślij do gry” znikną też z gry.')) return;
+  setDeleted([...getDeleted(), ...cats.filter(c => c.sent).map(c => c.id)]);
+  if (Object.keys(repl).length) replDirty(true);
   await DB.clear('cats'); await DB.clear('repl');
   cats = []; repl = {};
   $('#sendDone').classList.add('hidden');
@@ -446,6 +501,7 @@ function bind() {
   $('#catDelete').onclick = async () => {
     if (!confirm(`Usunąć kategorię „${norm(curCat.name) || 'Bez nazwy'}” razem ze zdjęciami?`)) return;
     cats = cats.filter(c => c !== curCat);
+    if (curCat.sent) setDeleted([...getDeleted(), curCat.id]);
     await DB.del('cats', curCat.id).catch(() => {});
     showView('main'); showTab('new');
   };
@@ -459,7 +515,8 @@ function bind() {
   $('#fxClose').onclick = closeFixer;
   $('#fxFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; fixPick(f); };
   $('#fxUndo').onclick = fixUndo;
-  $('#sendGo').onclick = send;
+  $('#sendGo').onclick = () => Cloud.enabled() ? sendCloud() : send();
+  $('#sendFile').onclick = send;
   $('#wipe').onclick = wipe;
   window.addEventListener('beforeunload', () => { if (curCat) persist(curCat); });
 }
