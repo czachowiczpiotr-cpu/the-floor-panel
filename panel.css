@@ -120,3 +120,9 @@ input:focus, select:focus { border-color: var(--gold); }
 .tourDots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .tourDots i.on { background: var(--gold); width: 26px; border-radius: 99px; }
 @keyframes slideIn { from { opacity: 0; transform: translateX(16px); } }
+.tile.gone img { opacity: .25; filter: grayscale(1); }
+.tile.gone .cap { text-decoration: line-through; color: var(--dim); }
+.tile .badge.bad { background: var(--bad); color: #fff; }
+#fxEditBox { display: flex; flex-direction: column; gap: 10px; }
+#fxEditBox .field { margin: 0; }
+#fxOrig:empty { display: none; }

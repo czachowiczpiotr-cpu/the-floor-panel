@@ -17,7 +17,7 @@
 <section id="gate" class="view hidden">
   <div class="card center">
     <h1>Cześć! 👋</h1>
-    <p>Tu dodajesz kategorie do naszej gry i poprawiasz słabe zdjęcia.</p>
+    <p>Tu dodajesz kategorie do naszej gry i edytujesz istniejące.</p>
     <label class="field"><span>Jak masz na imię?</span><input id="gateName" maxlength="20" autocomplete="given-name" placeholder="np. Ola"></label>
     <button id="gateGo" class="btn big">Zaczynamy</button>
   </div>
@@ -27,7 +27,7 @@
 <section id="main" class="view hidden">
   <nav class="tabs">
     <button data-tab="new" class="on">➕ Nowe kategorie</button>
-    <button data-tab="fix">🔧 Popraw zdjęcia</button>
+    <button data-tab="fix">✏️ Edytuj kategorie</button>
     <button data-tab="send">📤 Wyślij <b id="sendBadge"></b></button>
   </nav>
 
@@ -40,10 +40,12 @@
 
   <!-- poprawianie zdjęć -->
   <div id="tab-fix" class="tab hidden">
-    <p class="lead">Zdjęcie słabo pokazuje, o co chodzi? Kliknij je i podmień na lepsze. Odpowiedź zostaje ta sama.</p>
+    <p class="lead">Wybierz naszą kategorię. Kliknij zdjęcie, żeby <b>podmienić zdjęcie</b>, <b>poprawić opis</b> albo <b>usunąć</b> je z gry. Możesz też <b>dorzucić nowe zdjęcia</b>.</p>
     <div class="row">
       <select id="fixCat"></select>
     </div>
+    <label class="btn wide gold2 file">＋ Dodaj zdjęcia do tej kategorii<input id="fixAddFiles" type="file" accept="image/*" multiple></label>
+    <p id="fixCount" class="hint"></p>
     <input id="fixSearch" class="search" placeholder="Szukaj hasła…" type="search">
     <div id="fixGrid" class="grid"></div>
   </div>
@@ -96,14 +98,21 @@
 <section id="fixer" class="overlay hidden">
   <div class="fixBox">
     <div class="labTop"><button id="fxClose" class="btn ghost">← Wróć</button><span id="fxCat" class="pill"></span><span></span></div>
-    <h2 id="fxAnswer"></h2>
     <div class="fxPair">
-      <figure><img id="fxOld" alt=""><figcaption>teraz</figcaption></figure>
+      <figure id="fxOldFig"><img id="fxOld" alt=""><figcaption>oryginał</figcaption></figure>
       <figure id="fxNewFig" class="hidden"><img id="fxNew" alt=""><figcaption>nowe</figcaption></figure>
     </div>
-    <a id="fxGoogle" class="btn ghost wide" target="_blank" rel="noopener">🔎 Szukaj lepszego w Google Grafika</a>
-    <label class="btn big wide file">📷 Wybierz nowe zdjęcie<input id="fxFile" type="file" accept="image/*"></label>
-    <button id="fxUndo" class="btn ghost danger wide hidden">Cofnij podmianę</button>
+    <div id="fxGone" class="problem hidden">🗑 To hasło jest usunięte – po wysłaniu zniknie z gry.</div>
+    <div id="fxEditBox">
+      <label class="field"><span>Opis (to, co trzeba powiedzieć)</span>
+        <input id="fxAnswerIn" class="labInput" maxlength="60" autocomplete="off" enterkeyhint="next" placeholder="Co jest na zdjęciu?"></label>
+      <p id="fxOrig" class="hint center"></p>
+      <label class="btn big wide file"><span id="fxPickTxt">📷 Podmień zdjęcie</span><input id="fxFile" type="file" accept="image/*"></label>
+      <a id="fxGoogle" class="btn ghost wide" target="_blank" rel="noopener">🔎 Szukaj lepszego w Google Grafika</a>
+      <button id="fxNext" class="btn wide">✓ Gotowe</button>
+    </div>
+    <button id="fxUndo" class="btn ghost wide hidden">↩ Cofnij moje zmiany</button>
+    <button id="fxDel" class="btn ghost danger wide">🗑 Usuń z kategorii</button>
   </div>
 </section>
 
@@ -114,7 +123,7 @@
       <div class="slide">
         <div class="big">🎮</div>
         <h2>Jak to działa?</h2>
-        <p>W grze każdy dostaje kategorię i w pojedynku na czas zgaduje, co jest na zdjęciach. Ty możesz dorzucić <b>własne kategorie</b> albo <b>poprawić słabe zdjęcia</b>.</p>
+        <p>W grze każdy dostaje kategorię i w pojedynku na czas zgaduje, co jest na zdjęciach. Ty możesz dorzucić <b>własne kategorie</b> albo <b>edytować nasze kategorie</b>.</p>
       </div>
       <div class="slide">
         <div class="big">➕📷</div>
@@ -132,8 +141,8 @@
       </div>
       <div class="slide">
         <div class="big">🔧</div>
-        <h2>3. Popraw słabe zdjęcia</h2>
-        <p>W zakładce <b>Popraw zdjęcia</b> znajdziesz nasze kategorie. Zdjęcie słabo pokazuje, o co chodzi? Kliknij je, poszukaj lepszego (jest przycisk do Google Grafika), zapisz w telefonie i wybierz.</p>
+        <h2>3. Edytuj nasze kategorie</h2>
+        <p>W zakładce <b>Edytuj kategorie</b> są nasze kategorie. Kliknij zdjęcie, żeby <b>podmienić je</b> na lepsze (jest przycisk do Google Grafika), <b>poprawić opis</b> albo <b>usunąć</b>. Przyciskiem <b>＋ Dodaj zdjęcia</b> dorzucisz nowe hasła.</p>
       </div>
       <div class="slide">
         <div class="big">📤</div>

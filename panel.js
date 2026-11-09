@@ -250,73 +250,177 @@ function labDelete() {
   renderLabeler();
 }
 
-/* ---------------- poprawianie istniejących zdjęć ---------------- */
-let fixItem = null;
+/* ---------------- edycja istniejących kategorii ---------------- */
+// repl[key]: zmiana hasła  key "slug|oryginał" → {slug, a: oryginał, na?: nowy opis, blob?: nowe zdjęcie, del?: usunięte}
+//            nowe hasło    key "slug|+id"       → {slug, add: true, na, blob}
+let fixItem = null;   // {cat, key}
+const recsOf = slug => Object.values(repl).filter(r => r.slug === slug);
+const isEmptyEdit = r => !r.add && !r.blob && !r.del && !(norm(r.na) && norm(r.na) !== r.a);
+async function saveRec(r) {
+  r.sent = false;
+  if (isEmptyEdit(r)) return dropRec(r.key);
+  repl[r.key] = r;
+  try { await DB.put('repl', r); } catch (e) { toast('⚠️ Nie udało się zapisać', 3000); }
+}
+async function dropRec(key) {
+  if (!repl[key]) return;
+  delete repl[key];
+  replDirty(true);
+  await DB.del('repl', key).catch(() => {});
+}
 function renderFixSelect() {
   const sel = $('#fixCat');
   sel.innerHTML = CATALOG.map(c => {
-    const n = Object.values(repl).filter(r => r.slug === c.slug).length;
-    return `<option value="${esc(c.slug)}">${esc(c.name)}${n ? ` (✓ ${n})` : ''}</option>`;
+    const n = recsOf(c.slug).length;
+    return `<option value="${esc(c.slug)}">${esc(c.name)}${n ? ` (✏️ ${n})` : ''}</option>`;
   }).join('');
   let last = null; try { last = localStorage.getItem('tfp.fixCat'); } catch (e) {}
   if (last && CATALOG.some(c => c.slug === last)) sel.value = last;
+}
+const curFixCat = () => CATALOG.find(c => c.slug === $('#fixCat').value) || CATALOG[0];
+function fixEntries(cat) {
+  const out = cat.items.map(it => ({ key: cat.slug + '|' + it.a, it }));
+  for (const r of recsOf(cat.slug)) if (r.add) out.push({ key: r.key, it: null });
+  return out;
 }
 function renderFix() {
   if (!CATALOG.length) { $('#fixGrid').innerHTML = '<p class="hint">Brak katalogu zdjęć.</p>'; return; }
   const keep = $('#fixCat').value;
   renderFixSelect();
   if (keep) $('#fixCat').value = keep;
-  const cat = CATALOG.find(c => c.slug === $('#fixCat').value) || CATALOG[0];
+  const cat = curFixCat();
   const q = norm($('#fixSearch').value).toLowerCase();
   const g = $('#fixGrid');
   g.innerHTML = '';
-  for (const it of cat.items) {
-    if (q && !it.a.toLowerCase().includes(q)) continue;
-    const r = repl[cat.slug + '|' + it.a];
+  const list = fixEntries(cat);
+  $('#fixCount').textContent = `${list.filter(e => !repl[e.key]?.del).length} haseł w kategorii`;
+  for (const { key, it } of [...list.filter(e => !e.it).reverse(), ...list.filter(e => e.it)]) {
+    const r = repl[key];
+    const ans = (r && norm(r.na)) || (it ? it.a : '');
+    if (q && !ans.toLowerCase().includes(q) && !(it && it.a.toLowerCase().includes(q))) continue;
     const d = document.createElement('div');
-    d.className = 'tile' + (r ? ' done' : '');
-    d.innerHTML = `<img loading="lazy" src="${r ? urlOf(r.blob) : it.t}" alt="">${r ? '<span class="badge">nowe</span>' : ''}<div class="cap">${esc(it.a)}</div>`;
-    d.onclick = () => openFixer(cat, it);
+    const badge = !r ? '' : r.add ? 'nowe' : r.del ? 'usunięte' : 'zmienione';
+    d.className = 'tile' + (r ? ' done' : '') + (r && r.del ? ' gone' : '');
+    d.innerHTML = `<img loading="lazy" src="${r && r.blob ? urlOf(r.blob) : it ? it.t : ''}" alt="">${badge ? `<span class="badge${r.del ? ' bad' : ''}">${badge}</span>` : ''}<div class="cap${ans ? '' : ' empty'}">${esc(ans || 'wpisz opis')}</div>`;
+    d.onclick = () => openFixer(cat, key);
     g.appendChild(d);
   }
   if (!g.children.length) g.innerHTML = '<p class="hint">Nic nie pasuje.</p>';
 }
-function openFixer(cat, it) {
-  fixItem = { cat, it };
-  const r = repl[cat.slug + '|' + it.a];
+function openFixer(cat, key) {
+  const it = cat.items.find(x => cat.slug + '|' + x.a === key) || null;
+  const r = repl[key];
+  if (!it && !r) return closeFixer();
+  fixItem = { cat, key, it };
   $('#fxCat').textContent = cat.name;
-  $('#fxAnswer').textContent = it.a;
-  $('#fxOld').src = it.t;
-  $('#fxNewFig').classList.toggle('hidden', !r);
-  if (r) $('#fxNew').src = urlOf(r.blob);
-  $('#fxUndo').classList.toggle('hidden', !r);
-  $('#fxGoogle').href = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(it.a);
+  $('#fxOrig').textContent = it ? (r && norm(r.na) && norm(r.na) !== it.a ? `było: ${it.a}` : '') : 'nowe hasło – dodane przez ciebie';
+  $('#fxAnswerIn').value = (r && r.na) || (it ? it.a : '');
+  $('#fxOldFig').classList.toggle('hidden', !it);
+  if (it) $('#fxOld').src = it.t;
+  $('#fxNewFig').classList.toggle('hidden', !(r && r.blob));
+  if (r && r.blob) $('#fxNew').src = urlOf(r.blob);
+  const del = !!(r && r.del);
+  $('#fxGone').classList.toggle('hidden', !del);
+  $('#fxEditBox').classList.toggle('hidden', del);
+  $('#fxDel').classList.toggle('hidden', del);
+  $('#fxUndo').classList.toggle('hidden', !r || !!r.add);
+  $('#fxUndo').textContent = del ? '↩ Przywróć to hasło' : '↩ Cofnij moje zmiany';
+  $('#fxPickTxt').textContent = r && r.blob ? '📷 Wybierz inne zdjęcie' : (it ? '📷 Podmień zdjęcie' : '📷 Wybierz zdjęcie');
+  $('#fxNext').textContent = nextUnnamed() ? 'Zapisz i dalej →' : '✓ Gotowe';
+  $('#fxGoogle').href = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent($('#fxAnswerIn').value || cat.name);
   $('#fixer').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+}
+function nextUnnamed() {
+  if (!fixItem) return null;
+  return recsOf(fixItem.cat.slug).find(r => r.add && !norm(r.na) && r.key !== fixItem.key) || null;
 }
 function closeFixer() {
   $('#fixer').classList.add('hidden');
   document.body.style.overflow = '';
+  fixItem = null;
   renderFix(); updateBadge();
+}
+let fxTimer = null;
+function fixAnswerInput() {
+  if (!fixItem) return;
+  const { cat, key, it } = fixItem, v = $('#fxAnswerIn').value;
+  const r = repl[key] || { key, slug: cat.slug, a: it.a };
+  r.na = v;
+  if (it) $('#fxOrig').textContent = norm(v) && norm(v) !== it.a ? `było: ${it.a}` : '';
+  repl[key] = r;
+  clearTimeout(fxTimer);
+  fxTimer = setTimeout(async () => {
+    if (!repl[key]) return;
+    await saveRec(repl[key]);
+    if (fixItem && fixItem.key === key) $('#fxUndo').classList.toggle('hidden', !repl[key] || !!repl[key].add);
+  }, 300);
+}
+async function flushAnswer() {
+  clearTimeout(fxTimer);
+  if (fixItem && repl[fixItem.key]) await saveRec(repl[fixItem.key]);
+}
+async function fixNext() {
+  if (!fixItem) return;
+  const { cat, key } = fixItem;
+  if (repl[key] && repl[key].add && !norm(repl[key].na)) { toast('Wpisz, co jest na zdjęciu'); $('#fxAnswerIn').focus(); return; }
+  await flushAnswer();
+  const n = nextUnnamed();
+  if (n) { openFixer(cat, n.key); $('#fxAnswerIn').focus(); } else closeFixer();
 }
 async function fixPick(file) {
   if (!file || !fixItem) return;
   try {
     const blob = await shrink(file);
-    const { cat, it } = fixItem, key = cat.slug + '|' + it.a;
-    repl[key] = { key, slug: cat.slug, a: it.a, blob };
-    replDirty(true);
-    await DB.put('repl', repl[key]);
-    toast('Podmienione ✓');
-    openFixer(cat, it);
+    await flushAnswer();
+    const { cat, key, it } = fixItem;
+    const r = repl[key] || { key, slug: cat.slug, a: it.a };
+    r.blob = blob; delete r.path;
+    await saveRec(r);
+    toast('Zdjęcie podmienione ✓');
+    openFixer(cat, key);
   } catch (e) { toast('Nie udało się wczytać tego zdjęcia', 3500); }
 }
+async function fixDelete() {
+  if (!fixItem) return;
+  const { cat, key, it } = fixItem;
+  clearTimeout(fxTimer);
+  if (!it) {                                   // nowe hasło – po prostu znika
+    if (!confirm('Usunąć to zdjęcie?')) return;
+    await dropRec(key);
+    toast('Usunięte');
+    return closeFixer();
+  }
+  if (!confirm(`Usunąć „${it.a}” z kategorii „${cat.name}”? Po wysłaniu zniknie z gry.`)) return;
+  const r = { key, slug: cat.slug, a: it.a, del: true };
+  await saveRec(r);
+  toast('Usunięte z kategorii');
+  closeFixer();
+}
 async function fixUndo() {
-  const { cat, it } = fixItem, key = cat.slug + '|' + it.a;
-  delete repl[key];
-  replDirty(true);
-  await DB.del('repl', key).catch(() => {});
-  openFixer(cat, it);
+  if (!fixItem) return;
+  clearTimeout(fxTimer);
+  const { cat, key } = fixItem;
+  await dropRec(key);
+  openFixer(cat, key);
+}
+async function fixAdd(files) {
+  const cat = curFixCat();
+  if (!files.length || !cat) return;
+  const bad = [];
+  let first = null;
+  toast('Wczytuję zdjęcia…', 10000);
+  for (const f of files) {
+    try {
+      const blob = await shrink(f);
+      const key = cat.slug + '|+' + uid();
+      await saveRec({ key, slug: cat.slug, add: true, na: guessAnswer(f.name), blob });
+      if (!first) first = key;
+    } catch (e) { bad.push(f.name); }
+  }
+  toast(bad.length ? `Nie udało się wczytać ${bad.length} zdjęć` : `Dodane: ${files.length - bad.length} – teraz je podpisz`, 3000);
+  renderFix(); updateBadge();
+  if (first) { openFixer(cat, first); $('#fxAnswerIn').focus(); }
 }
 
 /* ---------------- wysyłka ---------------- */
@@ -340,6 +444,10 @@ function problems() {
     const d = dupes(c);
     if (d.length) out.push(`„${name}”: powtórzone hasła – ${d.slice(0, 4).join(', ')}.`);
   }
+  for (const c of CATALOG) {
+    const un = recsOf(c.slug).filter(r => r.add && !norm(r.na)).length;
+    if (un) out.push(`„${c.name}”: ${un} nowych zdjęć bez opisu (zakładka Edytuj).`);
+  }
   const names = cats.filter(c => c.items.length).map(c => norm(c.name).toLowerCase()).filter(Boolean);
   const dn = names.filter((n, i) => names.indexOf(n) !== i);
   if (dn.length) out.push(`Dwie kategorie mają tę samą nazwę: „${dn[0]}”.`);
@@ -355,7 +463,7 @@ function renderSend() {
   const photos = c.reduce((s, x) => s + x.items.length, 0);
   $('#sendSummary').innerHTML = `
     <div class="sumRow"><span>Nowe kategorie</span><b>${c.length} <small class="hint">(${photos} zdjęć)</small></b></div>
-    <div class="sumRow"><span>Poprawione zdjęcia</span><b>${r.length}</b></div>`;
+    <div class="sumRow"><span>Zmiany w istniejących kategoriach</span><b>${r.length}</b></div>`;
   const pr = problems(), warn = c.filter(x => x.items.length < MIN_GOOD).map(x => `„${esc(norm(x.name) || 'Bez nazwy')}” ma tylko ${x.items.length} zdjęć – w grze mogą się powtarzać. Lepiej ${MIN_GOOD}+.`);
   $('#sendProblems').innerHTML = pr.map(p => `<div class="problem">⛔ ${esc(p)}</div>`).join('') + warn.map(w => `<div class="warnBox">⚠️ ${w}</div>`).join('');
   const btn = $('#sendGo');
@@ -404,7 +512,7 @@ async function buildPack() {
     for (const it of cat.items) items.push({ a: norm(it.a), img: await toDataURL(it.blob) });
     pack.cats.push({ id: cat.id, name: norm(cat.name), items });
   }
-  for (const x of r) pack.repl.push({ slug: x.slug, a: x.a, img: await toDataURL(x.blob) });
+  for (const x of r) if (x.blob && !x.add) pack.repl.push({ slug: x.slug, a: x.a, img: await toDataURL(x.blob) });
   return pack;
 }
 async function send() {
@@ -512,9 +620,14 @@ function bind() {
   $('#labInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); labStep(1); } };
   $('#fixCat').onchange = () => { try { localStorage.setItem('tfp.fixCat', $('#fixCat').value); } catch (e) {} $('#fixSearch').value = ''; renderFix(); };
   $('#fixSearch').oninput = renderFix;
-  $('#fxClose').onclick = closeFixer;
+  $('#fxClose').onclick = async () => { await flushAnswer(); closeFixer(); };
   $('#fxFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; fixPick(f); };
   $('#fxUndo').onclick = fixUndo;
+  $('#fxDel').onclick = fixDelete;
+  $('#fxNext').onclick = fixNext;
+  $('#fxAnswerIn').oninput = fixAnswerInput;
+  $('#fxAnswerIn').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); fixNext(); } };
+  $('#fixAddFiles').onchange = e => { const f = [...e.target.files]; e.target.value = ''; fixAdd(f); };
   $('#sendGo').onclick = () => Cloud.enabled() ? sendCloud() : send();
   $('#sendFile').onclick = send;
   $('#wipe').onclick = wipe;
