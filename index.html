@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07070d">
+<title>The Floor – kategorie</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<header class="top">
+  <div class="logo">THE <span>FLOOR</span></div>
+  <div class="topR"><div class="who" id="who"></div><button id="help" class="helpBtn" title="Jak to działa?">?</button></div>
+</header>
+
+<!-- imię -->
+<section id="gate" class="view hidden">
+  <div class="card center">
+    <h1>Cześć! 👋</h1>
+    <p>Tu dodajesz kategorie do naszej gry i poprawiasz słabe zdjęcia.</p>
+    <label class="field"><span>Jak masz na imię?</span><input id="gateName" maxlength="20" autocomplete="given-name" placeholder="np. Ola"></label>
+    <button id="gateGo" class="btn big">Zaczynamy</button>
+  </div>
+</section>
+
+<!-- główny widok z zakładkami -->
+<section id="main" class="view hidden">
+  <nav class="tabs">
+    <button data-tab="new" class="on">➕ Nowe kategorie</button>
+    <button data-tab="fix">🔧 Popraw zdjęcia</button>
+    <button data-tab="send">📤 Wyślij <b id="sendBadge"></b></button>
+  </nav>
+
+  <!-- nowe kategorie -->
+  <div id="tab-new" class="tab">
+    <p class="lead">Wymyśl temat, wrzuć ~25+ zdjęć i podpisz każde jednym hasłem. Przykłady: „Nasze wakacje”, „Seriale”, „Ludzie z roku”.</p>
+    <div id="myCats"></div>
+    <button id="newCat" class="btn big wide">＋ Nowa kategoria</button>
+  </div>
+
+  <!-- poprawianie zdjęć -->
+  <div id="tab-fix" class="tab hidden">
+    <p class="lead">Zdjęcie słabo pokazuje, o co chodzi? Kliknij je i podmień na lepsze. Odpowiedź zostaje ta sama.</p>
+    <div class="row">
+      <select id="fixCat"></select>
+    </div>
+    <input id="fixSearch" class="search" placeholder="Szukaj hasła…" type="search">
+    <div id="fixGrid" class="grid"></div>
+  </div>
+
+  <!-- wysyłka -->
+  <div id="tab-send" class="tab hidden">
+    <div id="sendSummary"></div>
+    <div id="sendProblems"></div>
+    <button id="sendGo" class="btn big wide">📤 Wyślij</button>
+    <p class="hint center">Powstanie jeden plik. Wyślij go Messengerem albo WhatsAppem – resztę ogarnie gra.</p>
+    <div id="sendDone" class="card ok hidden"></div>
+    <button id="wipe" class="btn ghost danger wide">Wyczyść wszystko i zacznij od nowa</button>
+  </div>
+</section>
+
+<!-- edycja jednej kategorii -->
+<section id="catView" class="view hidden">
+  <div class="bar">
+    <button id="catBack" class="btn ghost">← Wróć</button>
+    <span id="catState" class="pill"></span>
+  </div>
+  <label class="field"><span>Nazwa kategorii</span><input id="catName" maxlength="40" placeholder="np. Nasze wakacje"></label>
+  <label class="btn big wide file">📷 Dodaj zdjęcia
+    <input id="catFiles" type="file" accept="image/*" multiple>
+  </label>
+  <div id="catProgress" class="progress hidden"><div></div><span></span></div>
+  <button id="catLabel" class="btn big wide gold2 hidden">✍️ Podpisz zdjęcia</button>
+  <div id="catGrid" class="grid"></div>
+  <button id="catDelete" class="btn ghost danger wide">Usuń tę kategorię</button>
+</section>
+
+<!-- podpisywanie: jedno zdjęcie na raz -->
+<section id="labeler" class="overlay hidden">
+  <div class="lab">
+    <div class="labTop">
+      <button id="labClose" class="btn ghost">Gotowe</button>
+      <span id="labCount"></span>
+      <button id="labDel" class="btn ghost danger" title="Usuń to zdjęcie">🗑</button>
+    </div>
+    <div class="labImg"><img id="labImg" alt=""></div>
+    <input id="labInput" class="labInput" placeholder="Co to jest?" maxlength="60" enterkeyhint="next" autocomplete="off" autocapitalize="sentences">
+    <div class="labNav">
+      <button id="labPrev" class="btn ghost">← Poprzednie</button>
+      <button id="labNext" class="btn">Dalej →</button>
+    </div>
+  </div>
+</section>
+
+<!-- podmiana zdjęcia -->
+<section id="fixer" class="overlay hidden">
+  <div class="fixBox">
+    <div class="labTop"><button id="fxClose" class="btn ghost">← Wróć</button><span id="fxCat" class="pill"></span><span></span></div>
+    <h2 id="fxAnswer"></h2>
+    <div class="fxPair">
+      <figure><img id="fxOld" alt=""><figcaption>teraz</figcaption></figure>
+      <figure id="fxNewFig" class="hidden"><img id="fxNew" alt=""><figcaption>nowe</figcaption></figure>
+    </div>
+    <a id="fxGoogle" class="btn ghost wide" target="_blank" rel="noopener">🔎 Szukaj lepszego w Google Grafika</a>
+    <label class="btn big wide file">📷 Wybierz nowe zdjęcie<input id="fxFile" type="file" accept="image/*"></label>
+    <button id="fxUndo" class="btn ghost danger wide hidden">Cofnij podmianę</button>
+  </div>
+</section>
+
+<!-- samouczek -->
+<section id="tour" class="overlay hidden">
+  <div class="tourBox">
+    <div class="tourSlides">
+      <div class="slide">
+        <div class="big">🎮</div>
+        <h2>Jak to działa?</h2>
+        <p>W grze każdy dostaje kategorię i w pojedynku na czas zgaduje, co jest na zdjęciach. Ty możesz dorzucić <b>własne kategorie</b> albo <b>poprawić słabe zdjęcia</b>.</p>
+      </div>
+      <div class="slide">
+        <div class="big">➕📷</div>
+        <h2>1. Nowa kategoria</h2>
+        <p>Kliknij <b>＋ Nowa kategoria</b>, wpisz nazwę (np. „Seriale”) i <b>📷 Dodaj zdjęcia</b> z galerii – możesz zaznaczyć kilkanaście naraz.</p>
+        <ul><li>Najlepiej <b>25+ zdjęć</b>, inaczej będą się powtarzać.</li>
+          <li>Jedno zdjęcie = jedna rzecz, wyraźnie widoczna.</li>
+          <li>Bez napisów na zdjęciu, które zdradzają odpowiedź.</li></ul>
+      </div>
+      <div class="slide">
+        <div class="big">✍️</div>
+        <h2>2. Podpisz zdjęcia</h2>
+        <p>Po wczytaniu zdjęcia pokazują się <b>po kolei</b>. Wpisz krótko, co na nim jest, i daj <b>Enter</b> – wskoczy następne. Pomyłka? Kliknij zdjęcie na liście i popraw.</p>
+        <ul><li>Hasło takie, jak ludzie by powiedzieli: „Shrek”, nie „Shrek 2 plakat”.</li></ul>
+      </div>
+      <div class="slide">
+        <div class="big">🔧</div>
+        <h2>3. Popraw słabe zdjęcia</h2>
+        <p>W zakładce <b>Popraw zdjęcia</b> znajdziesz nasze kategorie. Zdjęcie słabo pokazuje, o co chodzi? Kliknij je, poszukaj lepszego (jest przycisk do Google Grafika), zapisz w telefonie i wybierz.</p>
+      </div>
+      <div class="slide">
+        <div class="big">📤</div>
+        <h2>4. Wyślij</h2>
+        <p>Zakładka <b>Wyślij</b> sprawdzi, czy wszystko jest podpisane, i zrobi jeden plik. Wyślij go Piotrkowi na <b>Messengerze lub WhatsAppie</b> – i gotowe.</p>
+        <p class="hint">Twoja praca zapisuje się sama – możesz zamknąć stronę i wrócić później.</p>
+      </div>
+    </div>
+    <div class="tourDots" id="tourDots"></div>
+    <div class="labNav">
+      <button id="tourSkip" class="btn ghost">Pomiń</button>
+      <button id="tourNext" class="btn">Dalej →</button>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+<script src="catalog.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>
